@@ -27,41 +27,52 @@ const WORKFLOW_SPEC = {
   ],
   "steps": [
       {
-          "type": "roboflow_core/seg-preview@v1",
-          "name": "seg_preview",
+          "type": "roboflow_core/roboflow_object_detection_model@v2",
+          "name": "model",
           "images": "$inputs.image",
-          "class_names": [
-              "person",
-              "cell phone",
-              "cup"
+          "model_id": "rfdetr-medium"
+      },
+      {
+          "type": "roboflow_core/blur_visualization@v1",
+          "name": "blur_visualization",
+          "image": "$inputs.image",
+          "predictions": "$steps.model.predictions"
+      },
+      {
+          "type": "roboflow_core/property_definition@v1",
+          "name": "property_definition",
+          "data": "$steps.model.predictions",
+          "operations": [
+              {
+                  "type": "SequenceLength"
+              }
           ]
       },
       {
-          "type": "roboflow_core/mask_visualization@v1",
-          "name": "mask_visualization",
+          "type": "roboflow_core/bounding_box_visualization@v1",
+          "name": "bounding_box_visualization",
           "image": "$inputs.image",
-          "predictions": "$steps.seg_preview.predictions"
-      },
-      {
-          "type": "roboflow_core/label_visualization@v1",
-          "name": "label_visualization",
-          "image": "$steps.mask_visualization.image",
-          "predictions": "$steps.seg_preview.predictions",
-          "text": "Class and Confidence"
+          "predictions": "$steps.model.predictions"
       }
   ],
   "outputs": [
       {
           "type": "JsonField",
-          "name": "label_visualization",
+          "name": "blur",
           "coordinates_system": "own",
-          "selector": "$steps.label_visualization.image"
+          "selector": "$steps.blur_visualization.image"
       },
       {
           "type": "JsonField",
-          "name": "seg_preview",
+          "name": "countis",
           "coordinates_system": "own",
-          "selector": "$steps.seg_preview.predictions"
+          "selector": "$steps.property_definition.output"
+      },
+      {
+          "type": "JsonField",
+          "name": "bb",
+          "coordinates_system": "own",
+          "selector": "$steps.bounding_box_visualization.image"
       }
   ]
 };
@@ -92,7 +103,7 @@ async function connectWebcamToRoboflowWebRTC(options = {}) {
   const connector = connectors.withProxyUrl('/api/init-webrtc');
 
   // Establish WebRTC connection
-  const connection = await webrtc.use_stream({
+  const connection = await webrtc.useStream({
     source: await streams.useCamera({
       video: {
         facingMode: { ideal: "environment" },
@@ -108,7 +119,8 @@ async function connectWebcamToRoboflowWebRTC(options = {}) {
       // workspaceName: "meh-dq9yn",
       // workflowId: "custom-workflow-2",
       imageInputName: "image",
-      streamOutputNames: ["label_visualization"]
+      streamOutputNames: ["bb"],
+      dataOutputNames: ["countis"]
     },
     onData: onData,
     options: {
@@ -143,7 +155,7 @@ async function start() {
     activeConnection = connection;
 
     // Get and display the processed video stream
-    const remoteStream = await connection.remote_stream();
+    const remoteStream = await connection.remoteStream();
     videoEl.srcObject = remoteStream;
     videoEl.controls = false;
 

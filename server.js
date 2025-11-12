@@ -82,7 +82,7 @@ app.post('/api/init-webrtc', async (req, res) => {
       : { workspaceName: wrtcparams.workspaceName, workflowId: wrtcparams.workflowId };
 
     // Call Roboflow API
-    const answer = await client.initialise_webrtc_worker({
+    const answer = await client.initializeWebrtcWorker({
       offer,
       ...workflowConfig,
       config: {

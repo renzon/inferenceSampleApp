@@ -61,7 +61,7 @@ const workflowSpec = {
 const connector = connectors.withProxyUrl('/api/init-webrtc');
 
 // Start the stream
-const connection = await webrtc.use_stream({
+const connection = await webrtc.useStream({
   source: await streams.useCamera({ video: true, audio: false }),
   connector: connector,
   wrtcparams: {
@@ -72,7 +72,7 @@ const connection = await webrtc.use_stream({
 });
 
 // Display the processed video
-const remoteStream = await connection.remote_stream();
+const remoteStream = await connection.remoteStream();
 videoElement.srcObject = remoteStream;
 ```
 
@@ -96,7 +96,7 @@ app.post('/api/init-webrtc', async (req, res) => {
   });
 
   // Forward the request to Roboflow
-  const answer = await client.initialise_webrtc_worker({
+  const answer = await client.initializeWebrtcWorker({
     offer,
     workflowSpec: wrtcparams.workflowSpec,
     config: {
