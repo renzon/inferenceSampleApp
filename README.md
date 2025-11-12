@@ -1,5 +1,11 @@
 # Roboflow inferencejs sample app (realtime video processing)
 
+## Overview
+
+This is a sample application demonstrates how easy it is to integrate Roboflow's video capabilities in your own sloutions. 
+
+It showcases how you can stream a video from your webcam through your custom computer vision workflows and display the result on your web application in realtime.
+
 ## How to run
 
 * add your Roboflow API key to the `.env` file
@@ -8,7 +14,7 @@
 * Open http://localhost:3000
 
 
-## Architecture
+## How to Integrate
 
 ```
 Browser                    Your Server                 Roboflow API
@@ -19,65 +25,89 @@ Browser                    Your Server                 Roboflow API
 └─────────┘               └──────────┘               └──────────┘
 ```
 
-## Project Structure
+### 1. Install the client library
 
-```
-sampleApp/
-├── server.js              # Express backend with /api/init-webrtc proxy
-├── vite.config.js         # Vite build configuration
-├── package.json           # Dependencies and scripts
-├── .env                   # Your API key (create from .env.example)
-├── .env.example           # Template for environment variables
-├── .gitignore             # Git ignore rules
-├── src/
-│   ├── index.html         # Frontend UI
-│   └── app.js             # Frontend logic (imports from npm)
-└── public/                # Built frontend (auto-generated)
+```bash
+npm install inferencejs-client
 ```
 
-## API Endpoints
+### 2. Frontend: Connect to your webcam and start streaming
 
-### `POST /api/init-webrtc`
+```javascript
+import { connectors, webrtc, streams } from 'inferencejs-client';
 
-Proxies WebRTC initialization to Roboflow.
+// Define your workflow specification
+const workflowSpec = {
+  version: "1.0",
+  inputs: [{ type: "InferenceImage", name: "image" }],
+  steps: [
+    {
+      type: "roboflow_core/roboflow_instance_segmentation_model@v2",
+      name: "model",
+      images: "$inputs.image",
+      model_id: "your-model-id"
+    }
+  ],
+  outputs: [
+    {
+      type: "JsonField",
+      name: "output_image",
+      selector: "$steps.model.predictions"
+    }
+  ]
+};
 
-**Request:**
-```json
-{
-  "offer": {
-    "sdp": "...",
-    "type": "offer"
-  },
-  "wrtcparams": {
-    "workflowSpec": { ... },
-    "imageInputName": "image",
-    "streamOutputNames": ["output_image"]
+// Create a connector pointing to your backend proxy
+const connector = connectors.withProxyUrl('/api/init-webrtc');
+
+// Start the stream
+const connection = await webrtc.use_stream({
+  source: await streams.useCamera({ video: true, audio: false }),
+  connector: connector,
+  wrtcparams: {
+    workflowSpec: workflowSpec,
+    imageInputName: "image",
+    streamOutputNames: ["output_image"]
   }
-}
+});
+
+// Display the processed video
+const remoteStream = await connection.remote_stream();
+videoElement.srcObject = remoteStream;
 ```
 
-**Response:**
-```json
-{
-  "sdp": "...",
-  "type": "answer",
-  "context": {
-    "pipeline_id": "abc123",
-    "request_id": "xyz789"
-  }
-}
+### 3. Backend: Create a proxy endpoint
+
+Your backend needs to proxy the WebRTC initialization request to the Roboflow inference server while keeping your API key secure.
+
+```javascript
+import express from 'express';
+import { InferenceHTTPClient } from 'inferencejs-client';
+
+const app = express();
+app.use(express.json());
+
+app.post('/api/init-webrtc', async (req, res) => {
+  const { offer, wrtcparams } = req.body;
+
+  // Initialize client with your API key (stored securely on the server)
+  const client = InferenceHTTPClient.init({
+    apiKey: process.env.ROBOFLOW_API_KEY
+  });
+
+  // Forward the request to Roboflow
+  const answer = await client.initialise_webrtc_worker({
+    offer,
+    workflowSpec: wrtcparams.workflowSpec,
+    config: {
+      imageInputName: wrtcparams.imageInputName,
+      streamOutputNames: wrtcparams.streamOutputNames
+    }
+  });
+
+  res.json(answer);
+});
 ```
 
-### `GET /api/health`
-
-Health check endpoint.
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "apiKeyConfigured": true,
-  "message": "Server is ready"
-}
-```
+That's it! Your frontend will now stream video through your custom workflows and display the processed results.
 
