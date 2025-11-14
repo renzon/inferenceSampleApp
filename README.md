@@ -16,7 +16,8 @@ It showcases how you can stream a video from your webcam through your custom com
 
 ## How to Integrate
 
-[![Watch the video](https://cdn.loom.com/sessions/thumbnails/48b7c442a69c49e081d0dbec49e1ab57-with-play.gif)](https://www.loom.com/share/48b7c442a69c49e081d0dbec49e1ab57)
+https://www.loom.com/share/48b7c442a69c49e081d0dbec49e1ab57
+
 
 ```
 Browser                    Your Server                 Roboflow API
