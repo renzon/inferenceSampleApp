@@ -1,0 +1,97 @@
+{
+    "version": "1.0",
+    "inputs": [
+      {
+        "type": "InferenceImage",
+        "name": "image"
+      }
+    ],
+    "steps": [
+      {
+        "type": "roboflow_core/roboflow_keypoint_detection_model@v2",
+        "name": "keypoint",
+        "images": "$inputs.image",
+        "model_id": "yolov8n-pose-640",
+        "class_filter": [
+          "person"
+        ]
+      },
+      {
+        "type": "Suffix_Person_Class_With_Squating",
+        "name": "squat_detector",
+        "keypoint_prediction": "$steps.keypoint.predictions"
+      },
+      {
+        "type": "roboflow_core/label_visualization@v1",
+        "name": "label_visualization",
+        "image": "$inputs.image",
+        "predictions": "$steps.squat_detector.squat_prediction",
+        "color_palette": "ROBOFLOW"
+      },
+      {
+        "type": "roboflow_core/bounding_box_visualization@v1",
+        "name": "bounding_box_visualization",
+        "image": "$steps.label_visualization.image",
+        "predictions": "$steps.squat_detector.squat_prediction"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "JsonField",
+        "name": "bounding_box_visualization",
+        "coordinates_system": "own",
+        "selector": "$steps.bounding_box_visualization.image"
+      },
+      {
+        "type": "JsonField",
+        "name": "label_visualization",
+        "coordinates_system": "own",
+        "selector": "$steps.label_visualization.image"
+      },
+      {
+        "type": "JsonField",
+        "name": "squat_predictions",
+        "coordinates_system": "own",
+        "selector": "$steps.squat_detector.squat_prediction"
+      }
+    ],
+    "dynamic_blocks_definitions": [
+      {
+        "type": "DynamicBlockDefinition",
+        "manifest": {
+          "type": "ManifestDescription",
+          "description": "Appends ':squating' to all 'person' class names in a keypoint detections prediction, for all detected people.",
+          "block_type": "Suffix_Person_Class_With_Squating",
+          "inputs": {
+            "keypoint_prediction": {
+              "type": "DynamicInputDefinition",
+              "selector_types": [
+                "input_parameter",
+                "step_output"
+              ],
+              "selector_data_kind": {
+                "input_parameter": [
+                  "keypoint_detection_prediction"
+                ],
+                "step_output": [
+                  "keypoint_detection_prediction"
+                ]
+              }
+            }
+          },
+          "outputs": {
+            "squat_prediction": {
+              "type": "DynamicOutputDefinition",
+              "kind": [
+                "keypoint_detection_prediction"
+              ]
+            }
+          }
+        },
+        "code": {
+          "type": "PythonCode",
+          "run_function_code": "import numpy as np\n\n\n# Dictionary to track state for each prediction (keyed by detection_id or index)\n_prediction_states = {}  # {prediction_id: {\"state\": \"...\", \"counter\": 0}}\n\n\ndef calculate_angle(a, b, c):\n    \"\"\"Calculate the angle at point b given three points a, b, c as (x, y) tuples.\n    \n    Args:\n        a: First point (x, y)\n        b: Middle point (x, y) - angle is calculated at this point\n        c: Third point (x, y)\n        \n    Returns:\n        Angle in degrees\n    \"\"\"\n    a = np.array(a)\n    b = np.array(b)\n    c = np.array(c)\n    ba = a - b\n    bc = c - b\n    # Compute cosine similarity, clip to account for floating point errors\n    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-7)\n    cosine_angle = np.clip(cosine_angle, -1.0, 1.0)\n    angle = np.arccos(cosine_angle)\n    return np.degrees(angle)\n\n\ndef get_squat_phase(left_knee_angle):\n    \"\"\"Determine squat phase based on left knee angle.\n    \n    Args:\n        left_knee_angle: Angle in degrees (None if not available)\n        \n    Returns:\n        Phase name: \"standing\", \"half_squat\", or \"deep_squat\"\n    \"\"\"\n    if left_knee_angle is None:\n        return \"unknown\"\n    \n    # Thresholds for squat phases (adjustable)\n    # Standing/upright: angle > 170 degrees\n    # Half squat: 73 < angle <= 170 degrees\n    # Deep squat: angle <= 73 degrees\n    if left_knee_angle > 170:\n        return \"standing\"\n    elif left_knee_angle > 73:\n        return \"half_squat\"\n    else:\n        return \"deep_squat\"\n\n\ndef update_squat_state(prediction_id, phase):\n    \"\"\"Update squat movement state for a specific prediction based on current phase.\n    \n    State transitions:\n    - START -> STANDING (when phase is standing)\n    - STANDING -> DESCENDING (when phase is half_squat)\n    - DESCENDING -> SQUATTING (when phase is deep_squat)\n    - SQUATTING -> ASCENDING (when phase is half_squat)\n    - ASCENDING -> STANDING (when phase is standing, increments counter)\n    \n    Args:\n        prediction_id: Unique identifier for the prediction\n        phase: Current phase from get_squat_phase\n        \n    Returns:\n        Tuple of (previous_state, current_state, counter)\n    \"\"\"\n    global _prediction_states\n    \n    # Initialize state for this prediction if not exists\n    if prediction_id not in _prediction_states:\n        _prediction_states[prediction_id] = {\n            \"state\": \"START\",\n            \"previous_state\": \"START\",\n            \"counter\": 0\n        }\n    \n    state_info = _prediction_states[prediction_id]\n    previous_state = state_info[\"state\"]  # Current state becomes previous\n    current_state = state_info[\"state\"]\n    counter = state_info[\"counter\"]\n    \n    if phase == \"unknown\":\n        return (previous_state, current_state, counter)\n    \n    # State machine transitions\n    if current_state == \"START\":\n        if phase == \"standing\":\n            current_state = \"STANDING\"\n    \n    elif current_state == \"STANDING\":\n        if phase == \"half_squat\":\n            current_state = \"DESCENDING\"\n    \n    elif current_state == \"DESCENDING\":\n        if phase == \"deep_squat\":\n            current_state = \"SQUATTING\"\n    \n    elif current_state == \"SQUATTING\":\n        if phase == \"half_squat\":\n            current_state = \"ASCENDING\"\n    \n    elif current_state == \"ASCENDING\":\n        if phase == \"standing\":\n            current_state = \"STANDING\"\n            counter += 1\n    \n    # Update stored state\n    state_info[\"previous_state\"] = previous_state\n    state_info[\"state\"] = current_state\n    state_info[\"counter\"] = counter\n    \n    return (previous_state, current_state, counter)\n\n\ndef get_prediction_state(prediction_id):\n    \"\"\"Get the current state and counter for a prediction.\n    \n    Args:\n        prediction_id: Unique identifier for the prediction\n        \n    Returns:\n        Dictionary with \"state\" and \"counter\", or None if not found\n    \"\"\"\n    return _prediction_states.get(prediction_id)\n\n\ndef reset_prediction_state(prediction_id=None):\n    \"\"\"Reset the squat state for a specific prediction or all predictions.\n    \n    Args:\n        prediction_id: Unique identifier for the prediction, or None to reset all\n    \"\"\"\n    global _prediction_states\n    if prediction_id is None:\n        _prediction_states = {}\n    elif prediction_id in _prediction_states:\n        _prediction_states[prediction_id] = {\n            \"state\": \"START\",\n            \"previous_state\": \"START\",\n            \"counter\": 0\n        }\n\n\ndef get_state_label(state: str) -> str:\n    \"\"\"Get arrow symbol for each squat state.\n    \n    Args:\n        state: Current squat state\n        \n    Returns:\n        Arrow symbol representing the state\n    \"\"\"\n    arrow_map = {\n        \"START\": \"Start\",\n        \"STANDING\": \"Up\",\n        \"DESCENDING\": \"Dsc\",\n        \"SQUATTING\": \"Asc\",\n        \"ASCENDING\": \"Asc\"\n    }\n    return arrow_map.get(state, \"Start\")\n\n\ndef modify_class_name(class_name: str, left_knee_angle: float = None, prediction_id: str = None) -> str:\n    \"\"\"Modify a class name based on squat movement state.\n    \n    Args:\n        class_name: The original class name (not used in output)\n        left_knee_angle: Left knee angle in degrees (None if not available)\n        prediction_id: Unique identifier for the prediction\n        \n    Returns:\n        The modified label with arrow, state, and rep count (no class name)\n    \"\"\"\n    phase = get_squat_phase(left_knee_angle)\n    previous_state, current_state, counter = update_squat_state(prediction_id, phase)\n    arrow = get_state_label(current_state)\n    return f\"{arrow}: Reps {counter}\"\n\n\ndef run(self, keypoint_prediction) -> dict:\n    \"\"\"Append movement state suffix to class names based on left knee angle.\n    \n    Tracks squat movement state machine and counts completed squats per prediction.\n    \"\"\"\n    # Get class names and keypoints\n    class_names = keypoint_prediction.data.get('class_name')\n    keypoints_xy = keypoint_prediction.data.get('keypoints_xy')\n    keypoints_class_name = keypoint_prediction.data.get('keypoints_class_name')\n    predictions = keypoint_prediction.data.get('predictions', [])\n    \n    # Sanity check\n    if class_names is None or not isinstance(class_names, np.ndarray):\n        return {\"squat_prediction\": keypoint_prediction}\n    \n    # Calculate left knee angle for each prediction\n    left_knee_angles = []\n    prediction_ids = []\n    num_predictions = len(class_names)\n    \n    if keypoints_xy is not None and keypoints_class_name is not None:\n        for i in range(num_predictions):\n            left_knee_angle = None\n            prediction_id = None\n            \n            # Get prediction ID (use detection_id if available, otherwise use index)\n            if i < len(predictions) and isinstance(predictions[i], dict):\n                prediction_id = predictions[i].get('detection_id', f\"prediction_{i}\")\n            else:\n                prediction_id = f\"prediction_{i}\"\n            \n            prediction_ids.append(prediction_id)\n            \n            # Get keypoints for this prediction\n            if i < len(keypoints_xy) and i < len(keypoints_class_name):\n                kp_xy = keypoints_xy[i]\n                kp_names = keypoints_class_name[i]\n                \n                # Convert to dict for easier access\n                keypoints_dict = {}\n                for name, (x, y) in zip(kp_names, kp_xy):\n                    keypoints_dict[name] = [float(x), float(y)]\n                \n                # Calculate left knee angle if all required keypoints are present\n                if all(k in keypoints_dict for k in [\"left_hip\", \"left_knee\", \"left_ankle\"]):\n                    left_knee_angle = calculate_angle(\n                        keypoints_dict[\"left_hip\"],\n                        keypoints_dict[\"left_knee\"],\n                        keypoints_dict[\"left_ankle\"]\n                    )\n            \n            left_knee_angles.append(left_knee_angle)\n    else:\n        # No keypoints available, use None for all and generate IDs\n        left_knee_angles = [None] * num_predictions\n        prediction_ids = [f\"prediction_{i}\" for i in range(num_predictions)]\n    \n    # Apply modify_class_name to each class name with its corresponding angle and ID\n    modified = []\n    prediction_states = []\n    for class_name, angle, pred_id in zip(class_names, left_knee_angles, prediction_ids):\n        modified_name = modify_class_name(str(class_name), angle, pred_id)\n        modified.append(modified_name)\n        \n        # Get state info for this prediction\n        state_info = get_prediction_state(pred_id)\n        if state_info:\n            prediction_states.append({\n                \"prediction_id\": pred_id,\n                \"previous_state\": state_info.get(\"previous_state\", \"START\"),\n                \"current_state\": state_info[\"state\"],\n                \"counter\": state_info[\"counter\"]\n            })\n        else:\n            # Fallback if state not found\n            prediction_states.append({\n                \"prediction_id\": pred_id,\n                \"previous_state\": \"START\",\n                \"current_state\": \"START\",\n                \"counter\": 0\n            })\n    \n    # Convert back to numpy array with proper dtype\n    max_len = max(len(name) for name in modified)\n    new_dtype = np.dtype(f'U{max_len}')\n    modified_array = np.array(modified, dtype=new_dtype)\n    \n    keypoint_prediction.data['class_name'] = modified_array\n    \n    # Return result with state information for each prediction\n    result = {\n        \"squat_prediction\": keypoint_prediction,\n    }\n    \n    return result\n"
+        }
+      }
+    ]
+  }
