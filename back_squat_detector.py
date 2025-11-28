@@ -159,7 +159,7 @@ def get_state_label(state: str) -> str:
         "START": "Start",
         "STANDING": "Up",
         "DESCENDING": "Dsc",
-        "SQUATTING": "Asc",
+        "SQUATTING": "Down",
         "ASCENDING": "Asc"
     }
     return arrow_map.get(state, "Start")
@@ -182,20 +182,20 @@ def modify_class_name(class_name: str, left_knee_angle: float = None, prediction
     return f"{arrow}: Reps {counter}"
 
 
-def run(self, keypoint_prediction) -> dict:
+def run(self, keypoint_predictions) -> dict:
     """Append movement state suffix to class names based on left knee angle.
     
     Tracks squat movement state machine and counts completed squats per prediction.
     """
     # Get class names and keypoints
-    class_names = keypoint_prediction.data.get('class_name')
-    keypoints_xy = keypoint_prediction.data.get('keypoints_xy')
-    keypoints_class_name = keypoint_prediction.data.get('keypoints_class_name')
-    predictions = keypoint_prediction.data.get('predictions', [])
+    class_names = keypoint_predictions.data.get('class_name')
+    keypoints_xy = keypoint_predictions.data.get('keypoints_xy')
+    keypoints_class_name = keypoint_predictions.data.get('keypoints_class_name')
+    predictions = keypoint_predictions.data.get('predictions', [])
     
     # Sanity check
     if class_names is None or not isinstance(class_names, np.ndarray):
-        return {"squat_prediction": keypoint_prediction}
+        return {"squat_predictions": keypoint_predictions}
     
     # Calculate left knee angle for each prediction
     left_knee_angles = []
@@ -269,11 +269,11 @@ def run(self, keypoint_prediction) -> dict:
     new_dtype = np.dtype(f'U{max_len}')
     modified_array = np.array(modified, dtype=new_dtype)
     
-    keypoint_prediction.data['class_name'] = modified_array
+    keypoint_predictions.data['class_name'] = modified_array
     
     # Return result with state information for each prediction
     result = {
-        "squat_prediction": keypoint_prediction,
+        "squat_predictions": keypoint_predictions,
     }
     
     return result
