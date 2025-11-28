@@ -118,7 +118,7 @@ async function connectWebcamToRoboflowWebRTC(options = {}) {
       // workflowSpec: workflowSpec,
 
       workspaceName: "renzo-sandbox",
-      workflowId: "back-squat-webrtc",
+      workflowId: "squat-detector-workflow-yt",
       imageInputName: "image",
       streamOutputNames: ["bounding_box_visualization"],
       dataOutputNames: ["squat_predictions"]
