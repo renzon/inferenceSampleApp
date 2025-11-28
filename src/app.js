@@ -121,7 +121,7 @@ async function connectWebcamToRoboflowWebRTC(options = {}) {
       workflowId: "back-squat-webrtc",
       imageInputName: "image",
       streamOutputNames: ["bounding_box_visualization"],
-      dataOutputNames: ["model_predictions"]
+      dataOutputNames: ["squat_predictions"]
     },
     onData: onData,
     options: {
