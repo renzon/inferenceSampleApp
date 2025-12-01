@@ -12,72 +12,31 @@ const startBtn = document.getElementById("startBtn");
 const stopBtn = document.getElementById("stopBtn");
 const statusEl = document.getElementById("status");
 const videoEl = document.getElementById("video");
-const videoContainer = document.getElementById("videoContainer");
-const fullscreenBtn = document.getElementById("fullscreenBtn");
 
 // Track active connection
 let activeConnection = null;
 
-// Workflow specification for instance segmentation demo
-const WORKFLOW_SPEC = {
-  "version": "1.0",
-  "inputs": [
-      {
-          "type": "InferenceImage",
-          "name": "image"
-      }
-  ],
-  "steps": [
-      {
-          "type": "roboflow_core/roboflow_object_detection_model@v2",
-          "name": "model",
-          "images": "$inputs.image",
-          "model_id": "rfdetr-medium"
-      },
-      {
-          "type": "roboflow_core/blur_visualization@v1",
-          "name": "blur_visualization",
-          "image": "$inputs.image",
-          "predictions": "$steps.model.predictions"
-      },
-      {
-          "type": "roboflow_core/property_definition@v1",
-          "name": "property_definition",
-          "data": "$steps.model.predictions",
-          "operations": [
-              {
-                  "type": "SequenceLength"
-              }
-          ]
-      },
-      {
-          "type": "roboflow_core/bounding_box_visualization@v1",
-          "name": "bounding_box_visualization",
-          "image": "$inputs.image",
-          "predictions": "$steps.model.predictions"
-      }
-  ],
-  "outputs": [
-      {
-          "type": "JsonField",
-          "name": "blur",
-          "coordinates_system": "own",
-          "selector": "$steps.blur_visualization.image"
-      },
-      {
-          "type": "JsonField",
-          "name": "countis",
-          "coordinates_system": "own",
-          "selector": "$steps.property_definition.output"
-      },
-      {
-          "type": "JsonField",
-          "name": "bb",
-          "coordinates_system": "own",
-          "selector": "$steps.bounding_box_visualization.image"
-      }
-  ]
-};
+// Load workflow specification from JSON file
+let WORKFLOW_SPEC = null;
+
+async function loadWorkflowSpec() {
+  if (WORKFLOW_SPEC) {
+    return WORKFLOW_SPEC;
+  }
+  
+  try {
+    const response = await fetch('/back_squat_workflow.json');
+    if (!response.ok) {
+      throw new Error(`Failed to load workflow: ${response.status} ${response.statusText}`);
+    }
+    WORKFLOW_SPEC = await response.json();
+    console.log('[UI] Workflow loaded successfully');
+    return WORKFLOW_SPEC;
+  } catch (error) {
+    console.error('[UI] Failed to load workflow:', error);
+    throw error;
+  }
+}
 
 /**
  * Update status display
@@ -96,10 +55,9 @@ function setStatus(text) {
  * @returns {Promise<RFWebRTCConnection>} WebRTC connection object
  */
 async function connectWebcamToRoboflowWebRTC(options = {}) {
-  const {
-    workflowSpec = WORKFLOW_SPEC,
-    onData
-  } = options;
+  // Load workflow spec if not provided
+  const workflowSpec = options.workflowSpec || await loadWorkflowSpec();
+  const onData = options.onData;
 
   // Create connector that uses backend proxy (keeps API key secure)
   const connector = connectors.withProxyUrl('/api/init-webrtc');
@@ -117,10 +75,10 @@ async function connectWebcamToRoboflowWebRTC(options = {}) {
     }),
     connector: connector,
     wrtcParams: {
-      // workflowSpec: workflowSpec,
+      workflowSpec: workflowSpec,
 
-      workspaceName: "renzo-sandbox",
-      workflowId: "squat-detector-workflow-yt",
+      // workspaceName: "renzo-sandbox",
+      // workflowId: "squat-detector-workflow-yt",
       imageInputName: "image",
       streamOutputNames: ["bounding_box_visualization"],
       dataOutputNames: ["squat_predictions"]
@@ -217,45 +175,6 @@ async function stop() {
     setStatus("Idle");
   }
 }
-
-// Fullscreen toggle
-fullscreenBtn.addEventListener("click", async () => {
-  try {
-    if (!document.fullscreenElement) {
-      // Enter fullscreen
-      if (videoContainer.requestFullscreen) {
-        await videoContainer.requestFullscreen();
-      } else if (videoContainer.webkitRequestFullscreen) {
-        await videoContainer.webkitRequestFullscreen();
-      } else if (videoContainer.msRequestFullscreen) {
-        await videoContainer.msRequestFullscreen();
-      }
-      fullscreenBtn.textContent = "⛶ Exit";
-      videoContainer.classList.add("fullscreen");
-    } else {
-      // Exit fullscreen
-      if (document.exitFullscreen) {
-        await document.exitFullscreen();
-      } else if (document.webkitExitFullscreen) {
-        await document.webkitExitFullscreen();
-      } else if (document.msExitFullscreen) {
-        await document.msExitFullscreen();
-      }
-      fullscreenBtn.textContent = "⛶ Fullscreen";
-      videoContainer.classList.remove("fullscreen");
-    }
-  } catch (err) {
-    console.error("Fullscreen error:", err);
-  }
-});
-
-// Update fullscreen button when exiting via ESC key
-document.addEventListener("fullscreenchange", () => {
-  if (!document.fullscreenElement) {
-    fullscreenBtn.textContent = "⛶ Fullscreen";
-    videoContainer.classList.remove("fullscreen");
-  }
-});
 
 // Attach event listeners
 startBtn.addEventListener("click", start);
