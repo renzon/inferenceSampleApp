@@ -2,138 +2,196 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Roboflow WebRTC - Secure Streaming</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>CrossFit Judge</title>
     <style>
         :root { color-scheme: light dark; }
+        * {
+            box-sizing: border-box;
+        }
         body {
             margin: 0;
+            padding: 0;
             font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
+            background: #000;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
         .container {
-            max-width: 720px;
-            margin: 0 auto;
-            padding: 16px;
+            width: 100%;
+            max-width: 100%;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
         }
         .controls {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 12px;
-            margin: 16px 0;
-        }
-        h1 {
-            font-size: 24px;
-            margin: 12px 0;
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.8);
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
         }
         button {
             appearance: none;
-            padding: 10px 20px;
-            border-radius: 8px;
+            padding: 14px 28px;
+            border-radius: 12px;
             border: 0;
             font-weight: 600;
             cursor: pointer;
-            background: #4f46e5;
-            color: white;
-            font-size: 14px;
+            font-size: 16px;
+            min-width: 100px;
+            transition: all 0.2s;
+            touch-action: manipulation;
         }
-        button:hover:not(:disabled) {
-            background: #4338ca;
+        #startBtn {
+            background: #22c55e;
+            color: white;
+        }
+        #startBtn:hover:not(:disabled) {
+            background: #16a34a;
+        }
+        #startBtn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        #stopBtn {
+            background: #ef4444;
+            color: white;
+        }
+        #stopBtn:hover:not(:disabled) {
+            background: #dc2626;
+        }
+        #stopBtn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        #fullscreenBtn {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        #fullscreenBtn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        #fullscreenBtn:active:not(:disabled) {
+            transform: scale(0.98);
         }
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        #status {
-            font-family: ui-monospace, Monaco, Consolas, monospace;
-            font-size: 14px;
-            padding: 8px 12px;
-            background: rgba(0, 0, 0, 0.05);
-            border-radius: 6px;
-        }
         .video-container {
-            margin-top: 20px;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             background: #000;
-            border-radius: 12px;
+            position: relative;
             overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding-top: 60px; /* Space for title */
+            padding-bottom: 80px; /* Space for controls */
+        }
+        .video-container.fullscreen {
+            padding-bottom: 0;
         }
         video {
             width: 100%;
-            height: auto;
+            height: 100%;
+            object-fit: contain;
             display: block;
         }
-        .info {
-            margin-top: 20px;
+        .video-container.fullscreen video {
+            width: 100vw;
+            height: 100vh;
+        }
+        h1 {
+            margin: 0;
             padding: 16px;
-            background: rgba(34, 197, 94, 0.08);
-            border-radius: 8px;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-        .info h3 {
-            margin: 0 0 8px 0;
-            font-size: 16px;
-            color: #16a34a;
-        }
-        .info code {
-            background: rgba(0, 0, 0, 0.1);
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 13px;
-        }
-        .security-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 12px;
-            background: rgba(34, 197, 94, 0.15);
-            border-radius: 6px;
-            font-weight: 600;
-            color: #16a34a;
-            font-size: 13px;
-            margin-bottom: 12px;
-        }
-        .footer {
-            margin: 20px 0;
             text-align: center;
-            font-size: 12px;
-            opacity: 0.7;
+            color: white;
+            font-size: 24px;
+            font-weight: 700;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 99;
+        }
+        #status {
+            display: none; /* Hidden on mobile */
+        }
+        /* Desktop styles */
+        @media (min-width: 768px) {
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+            }
+            h1 {
+                position: relative;
+                background: transparent;
+                backdrop-filter: none;
+                padding: 20px;
+                font-size: 32px;
+            }
+            .controls {
+                position: relative;
+                background: transparent;
+                backdrop-filter: none;
+            }
+            .video-container {
+                padding-top: 0;
+                padding-bottom: 0;
+                margin: 20px;
+                border-radius: 12px;
+                overflow: hidden;
+            }
+            #status {
+                display: block;
+                font-family: ui-monospace, Monaco, Consolas, monospace;
+                font-size: 14px;
+                padding: 8px 12px;
+                background: rgba(0, 0, 0, 0.05);
+                border-radius: 6px;
+                color: rgba(255, 255, 255, 0.7);
+            }
+        }
+        /* Fullscreen styles */
+        .video-container:fullscreen {
+            padding: 0;
+            background: #000;
+        }
+        .video-container:fullscreen video {
+            width: 100vw;
+            height: 100vh;
+        }
+        .video-container:fullscreen .controls {
+            position: fixed;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Roboflow WebRTC - Secure Streaming</h1>
-
-        <div class="controls">
-            <button id="startBtn">Start Camera</button>
-            <button id="stopBtn" disabled>Stop</button>
-            <div id="status">Idle</div>
-        </div>
-
-        <div class="video-container">
+        <h1>CrossFit Judge</h1>
+        <div class="video-container" id="videoContainer">
             <video id="video" autoplay playsinline muted></video>
         </div>
 
-        <div class="info">
-            <div class="security-badge">
-                🔒 Secure Mode
-            </div>
-            <h3>Production-Ready WebRTC Streaming</h3>
-            <p>
-                This example uses <code>connectors.withProxyUrl()</code> to keep your API key secure on the backend.
-                The frontend never sees your API key - all communication with Roboflow is proxied through your Express server.
-            </p>
-            <ul style="margin: 8px 0;">
-                <li>✅ API key stays on server</li>
-                <li>✅ Production-ready security</li>
-                <li>✅ Easy to deploy</li>
-                <li>✅ Using npm package imports</li>
-            </ul>
-        </div>
-
-        <div class="footer">
-            Powered by Roboflow InferenceJS
+        <div class="controls">
+            <button id="startBtn">Start</button>
+            <button id="stopBtn" disabled>Stop</button>
+            <button id="fullscreenBtn">⛶ Fullscreen</button>
+            <div id="status">Idle</div>
         </div>
     </div>
 

@@ -12,6 +12,8 @@ const startBtn = document.getElementById("startBtn");
 const stopBtn = document.getElementById("stopBtn");
 const statusEl = document.getElementById("status");
 const videoEl = document.getElementById("video");
+const videoContainer = document.getElementById("videoContainer");
+const fullscreenBtn = document.getElementById("fullscreenBtn");
 
 // Track active connection
 let activeConnection = null;
@@ -215,6 +217,45 @@ async function stop() {
     setStatus("Idle");
   }
 }
+
+// Fullscreen toggle
+fullscreenBtn.addEventListener("click", async () => {
+  try {
+    if (!document.fullscreenElement) {
+      // Enter fullscreen
+      if (videoContainer.requestFullscreen) {
+        await videoContainer.requestFullscreen();
+      } else if (videoContainer.webkitRequestFullscreen) {
+        await videoContainer.webkitRequestFullscreen();
+      } else if (videoContainer.msRequestFullscreen) {
+        await videoContainer.msRequestFullscreen();
+      }
+      fullscreenBtn.textContent = "⛶ Exit";
+      videoContainer.classList.add("fullscreen");
+    } else {
+      // Exit fullscreen
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        await document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) {
+        await document.msExitFullscreen();
+      }
+      fullscreenBtn.textContent = "⛶ Fullscreen";
+      videoContainer.classList.remove("fullscreen");
+    }
+  } catch (err) {
+    console.error("Fullscreen error:", err);
+  }
+});
+
+// Update fullscreen button when exiting via ESC key
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement) {
+    fullscreenBtn.textContent = "⛶ Fullscreen";
+    videoContainer.classList.remove("fullscreen");
+  }
+});
 
 // Attach event listeners
 startBtn.addEventListener("click", start);
