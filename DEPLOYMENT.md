@@ -8,6 +8,56 @@ This guide will help you deploy the application on an EC2 Ubuntu instance using 
 - Domain name pointing to your EC2 instance's public IP
 - Ports 80 and 443 open in your EC2 security group
 
+## Step 0: Generate SSH key and add GitHub deploy key
+
+You only need to do this once per EC2 instance (or per deployment host).
+
+```bash
+# On your local machine (recommended) or directly on the EC2 instance
+ssh-keygen -o -a 100 -t ed25519 -f ~/.ssh/inference-app -C "inference-app-deploy"
+
+# This creates:
+# - Private key:  ~/.ssh/inference-app
+# - Public key:   ~/.ssh/inference-app.pub
+```
+
+1. **Copy the public key**:
+   ```bash
+   cat ~/.ssh/inference-app.pub
+   ```
+2. **Add as a deploy key in GitHub**:
+   - Go to your GitHub repo → **Settings** → **Deploy keys**
+   - Click **Add deploy key**
+   - **Title**: `inference-app-ec2` (or anything you like)
+   - **Key**: paste the contents of `inference-app.pub`
+   - Enable **Allow write access** only if you truly need pushes from the server (usually **read-only is enough**)
+   - Click **Add key**
+3. **Configure SSH to use this key (on the EC2 instance)**:
+   ```bash
+   mkdir -p ~/.ssh
+   chmod 700 ~/.ssh
+
+   # Copy your private key to the EC2 instance as ~/.ssh/inference-app
+   # (for example, using scp from your local machine)
+   # scp ~/.ssh/inference-app ubuntu@your-ec2-ip:~/.ssh/inference-app
+
+   chmod 600 ~/.ssh/inference-app
+
+   cat >> ~/.ssh/config << 'EOF'
+   Host github.com
+     HostName github.com
+     User git
+     IdentityFile ~/.ssh/inference-app
+   EOF
+   chmod 600 ~/.ssh/config
+   ```
+
+4. **Test the connection on the EC2 instance**:
+   ```bash
+   ssh -T git@github.com
+   ```
+   You should see a message like: `Hi <username>! You've successfully authenticated, but GitHub does not provide shell access.`
+
 ## Step 1: Install Docker and Docker Compose on EC2
 
 ```bash
@@ -91,17 +141,19 @@ mkdir -p nginx/ssl
 docker-compose up -d
 
 # Obtain SSL certificate (replace with your domain and email)
-docker-compose run --rm certbot certonly \
+# Note: We override the entrypoint because the certbot service has a custom entrypoint for renewals
+docker-compose run --rm --entrypoint "" certbot certbot certonly \
   --webroot \
   --webroot-path=/var/www/certbot \
-  --email your-email@example.com \
+  --email renzo@roboflow.com \
   --agree-tos \
   --no-eff-email \
-  -d your-domain.com \
-  -d www.your-domain.com
+  -d dev.pro.br \
+  -d cf.dev.pro.br
 
-# After certificate is obtained, update the domain in default.conf if needed
-# The certificate path should match: /etc/letsencrypt/live/your-domain.com/
+# After certificate is obtained, update the domain in default.conf
+# Replace YOUR_DOMAIN with your actual domain (e.g., dev.pro.br)
+sed -i 's/YOUR_DOMAIN/dev.pro.br/g' nginx/conf.d/default.conf
 
 # Restart NGINX to load SSL certificates
 docker-compose restart nginx
@@ -204,14 +256,22 @@ docker-compose restart nginx
 
 ### SSL certificate issues
 ```bash
-# Check certificate status
-docker-compose exec certbot certbot certificates
+# Check certificate status (override entrypoint to run command)
+docker-compose run --rm --entrypoint "" certbot certbot certificates
 
 # Manually renew certificate
-docker-compose run --rm certbot renew
+docker-compose run --rm --entrypoint "" certbot certbot renew
 
 # Check certbot logs
 docker-compose logs certbot
+
+# If certbot says "No renewals were attempted" when trying to obtain a certificate:
+# Make sure you're using --entrypoint "" to override the default entrypoint
+# Example:
+# docker-compose run --rm --entrypoint "" certbot certbot certonly \
+#   --webroot --webroot-path=/var/www/certbot \
+#   --email your-email@example.com --agree-tos --no-eff-email \
+#   -d your-domain.com
 ```
 
 ### Permission issues
@@ -230,4 +290,5 @@ newgrp docker
 2. Regularly update Docker images: `docker-compose pull`
 3. Monitor logs regularly: `docker-compose logs -f`
 4. Keep your system updated: `sudo apt update && sudo apt upgrade`
+
 

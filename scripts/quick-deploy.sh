@@ -50,3 +50,4 @@ echo "To view logs:"
 echo "  docker-compose logs -f"
 echo ""
 
+

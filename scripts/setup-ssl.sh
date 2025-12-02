@@ -35,7 +35,8 @@ sleep 5
 
 # Obtain SSL certificate
 echo "Obtaining SSL certificate..."
-docker-compose run --rm certbot certonly \
+# Override entrypoint because certbot service has custom entrypoint for renewals
+docker-compose run --rm --entrypoint "" certbot certbot certonly \
   --webroot \
   --webroot-path=/var/www/certbot \
   --email "$EMAIL" \
@@ -54,4 +55,5 @@ echo "Your application should now be accessible at: https://$DOMAIN"
 echo ""
 echo "To verify certificate renewal is working:"
 echo "  docker-compose logs certbot"
+
 
