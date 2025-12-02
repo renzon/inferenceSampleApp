@@ -23,7 +23,7 @@ async function loadWorkflowSpec() {
   if (WORKFLOW_SPEC) {
     return WORKFLOW_SPEC;
   }
-  
+
   try {
     const response = await fetch('/back_squat_workflow.json');
     if (!response.ok) {
@@ -35,6 +35,62 @@ async function loadWorkflowSpec() {
   } catch (error) {
     console.error('[UI] Failed to load workflow:', error);
     throw error;
+  }
+}
+
+/**
+ * Get TURN server credentials from backend
+ *
+ * Fetches dynamic TURN credentials from Roboflow API via backend proxy.
+ * These credentials allow WebRTC connections to work behind NAT/firewalls.
+ *
+ * @returns {Promise<Object>} ICE server configuration with TURN credentials
+ */
+async function getTurnCredentials() {
+  try {
+    console.log('[UI] Fetching TURN credentials...');
+
+    const response = await fetch('/api/webrtc_turn_config');
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch TURN config: ${response.status} ${response.statusText}`);
+    }
+
+    const turnConfig = await response.json();
+
+    console.log('[UI] Raw TURN config from API:', turnConfig);
+
+    // Validate that we have the required fields
+    if (!turnConfig.urls) {
+      console.error('[UI] Invalid TURN config: missing urls field');
+      return null;
+    }
+
+    if (!turnConfig.username || !turnConfig.credential) {
+      console.error('[UI] Invalid TURN config: missing username or credential');
+      return null;
+    }
+
+    // RTCIceServer requires 'urls' to be an array of strings
+    // The API might return it as a string or array, so normalize it
+    const urls = Array.isArray(turnConfig.urls) ? turnConfig.urls : [turnConfig.urls];
+
+    // IMPORTANT: Only include valid RTCIceServer fields (urls, username, credential)
+    // Do NOT include extra fields like 'ttl' as they will cause "Malformed RTCIceServer" error
+    const iceServer = {
+      urls: urls,
+      username: turnConfig.username,
+      credential: turnConfig.credential
+    };
+
+    console.log('[UI] Converted ICE server config:', iceServer);
+
+    return iceServer;
+
+  } catch (error) {
+    console.error('[UI] Failed to fetch TURN credentials:', error);
+    // Return null if TURN fetch fails - connection will fall back to STUN only
+    return null;
   }
 }
 
@@ -59,6 +115,25 @@ async function connectWebcamToRoboflowWebRTC(options = {}) {
   const workflowSpec = options.workflowSpec || await loadWorkflowSpec();
   const onData = options.onData;
 
+  // Fetch TURN credentials for NAT traversal
+  const turnServer = await getTurnCredentials();
+
+  // Build ICE servers configuration
+  const iceServers = [
+    // Google's public STUN server (for basic NAT traversal)
+    { urls: ["stun:stun.l.google.com:19302"] }
+  ];
+
+  // Add TURN server if credentials were fetched successfully
+  if (turnServer) {
+    iceServers.push(turnServer);
+    console.log('[UI] Using TURN server for enhanced NAT traversal');
+  } else {
+    console.warn('[UI] TURN server unavailable, using STUN only');
+  }
+
+  console.log('[UI] Final ICE servers configuration:', iceServers);
+
   // Create connector that uses backend proxy (keeps API key secure)
   const connector = connectors.withProxyUrl('/api/init-webrtc');
 
@@ -81,13 +156,16 @@ async function connectWebcamToRoboflowWebRTC(options = {}) {
       // workflowId: "squat-detector-workflow-yt",
       imageInputName: "image",
       streamOutputNames: ["bounding_box_visualization"],
-      dataOutputNames: ["squat_predictions"]
+      dataOutputNames: ["squat_predictions"],
+
+      // ICE servers for WebRTC NAT traversal (STUN + TURN)
+      iceServers: iceServers
     },
     onData: onData,
     options: {
       disableInputStreamDownscaling: true
     }
-});
+  });
 
   return connection;
 }
