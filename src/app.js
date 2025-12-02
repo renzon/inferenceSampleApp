@@ -259,28 +259,78 @@ async function stop() {
 /**
  * Toggle fullscreen mode
  */
-function toggleFullscreen() {
-  if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
-    // Enter fullscreen
-    if (videoContainer.requestFullscreen) {
-      videoContainer.requestFullscreen();
-    } else if (videoContainer.webkitRequestFullscreen) {
-      videoContainer.webkitRequestFullscreen();
-    } else if (videoContainer.mozRequestFullScreen) {
-      videoContainer.mozRequestFullScreen();
-    } else if (videoContainer.msRequestFullscreen) {
-      videoContainer.msRequestFullscreen();
+async function toggleFullscreen() {
+  try {
+    const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+    
+    if (!isFullscreen) {
+      // Enter fullscreen
+      console.log('[UI] Attempting to enter fullscreen...');
+      
+      // Try standard API first
+      if (videoContainer.requestFullscreen) {
+        await videoContainer.requestFullscreen({ navigationUI: 'hide' });
+        console.log('[UI] Entered fullscreen (standard API)');
+        return;
+      }
+      
+      // Fallback to vendor prefixes
+      if (videoContainer.webkitRequestFullscreen) {
+        await videoContainer.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+        console.log('[UI] Entered fullscreen (webkit)');
+        return;
+      }
+      
+      if (videoContainer.mozRequestFullScreen) {
+        await videoContainer.mozRequestFullScreen(Element.ALLOW_KEYBOARD_INPUT);
+        console.log('[UI] Entered fullscreen (moz)');
+        return;
+      }
+      
+      if (videoContainer.msRequestFullscreen) {
+        await videoContainer.msRequestFullscreen();
+        console.log('[UI] Entered fullscreen (ms)');
+        return;
+      }
+      
+      console.error('[UI] Fullscreen API not supported in this browser');
+      alert('Fullscreen is not supported in this browser');
+    } else {
+      // Exit fullscreen
+      console.log('[UI] Attempting to exit fullscreen...');
+      
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        await document.webkitExitFullscreen();
+      } else if (document.mozCancelFullScreen) {
+        await document.mozCancelFullScreen();
+      } else if (document.msExitFullscreen) {
+        await document.msExitFullscreen();
+      }
+      
+      console.log('[UI] Exited fullscreen');
     }
-  } else {
-    // Exit fullscreen
-    if (document.exitFullscreen) {
-      document.exitFullscreen();
-    } else if (document.webkitExitFullscreen) {
-      document.webkitExitFullscreen();
-    } else if (document.mozCancelFullScreen) {
-      document.mozCancelFullScreen();
-    } else if (document.msExitFullscreen) {
-      document.msExitFullscreen();
+  } catch (error) {
+    console.error('[UI] Fullscreen error:', error);
+    // Show user-friendly error message
+    if (error.name === 'NotAllowedError') {
+      alert('Fullscreen was denied. Please allow fullscreen permissions and try again.');
+    } else if (error.name === 'TypeError') {
+      console.warn('[UI] Fullscreen API may not be available (possibly in iframe)');
+      // Try alternative: make video element fullscreen
+      try {
+        if (videoEl.requestFullscreen) {
+          await videoEl.requestFullscreen({ navigationUI: 'hide' });
+        } else if (videoEl.webkitRequestFullscreen) {
+          await videoEl.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+        }
+      } catch (videoError) {
+        console.error('[UI] Video element fullscreen also failed:', videoError);
+        alert('Unable to enter fullscreen. This may be due to browser restrictions or iframe limitations.');
+      }
+    } else {
+      alert('An error occurred while trying to toggle fullscreen: ' + error.message);
     }
   }
 }
@@ -318,6 +368,26 @@ window.addEventListener("beforeunload", () => {
   }
 });
 
+// Check fullscreen API availability on load
+function checkFullscreenSupport() {
+  const support = {
+    standard: !!videoContainer.requestFullscreen,
+    webkit: !!videoContainer.webkitRequestFullscreen,
+    moz: !!videoContainer.mozRequestFullScreen,
+    ms: !!videoContainer.msRequestFullscreen,
+    available: !!(videoContainer.requestFullscreen || videoContainer.webkitRequestFullscreen || 
+                   videoContainer.mozRequestFullScreen || videoContainer.msRequestFullscreen)
+  };
+  
+  console.log('[UI] Fullscreen API support:', support);
+  
+  if (!support.available) {
+    console.warn('[UI] Fullscreen API not supported - button may not work');
+    fullscreenBtn.disabled = true;
+    fullscreenBtn.title = 'Fullscreen not supported in this browser';
+  }
+}
+
 // Check server health on load
 fetch('/api/health')
   .then(res => res.json())
@@ -330,3 +400,6 @@ fetch('/api/health')
   .catch(err => {
     console.error('[UI] Failed to check server health:', err);
   });
+
+// Check fullscreen support on load
+checkFullscreenSupport();
