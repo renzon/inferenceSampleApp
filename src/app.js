@@ -10,8 +10,10 @@ import { connectors, webrtc, streams } from '@roboflow/inference-sdk';
 // Get DOM elements
 const startBtn = document.getElementById("startBtn");
 const stopBtn = document.getElementById("stopBtn");
+const fullscreenBtn = document.getElementById("fullscreenBtn");
 const statusEl = document.getElementById("status");
 const videoEl = document.getElementById("video");
+const videoContainer = document.getElementById("videoContainer");
 
 // Track active connection
 let activeConnection = null;
@@ -254,9 +256,54 @@ async function stop() {
   }
 }
 
+/**
+ * Toggle fullscreen mode
+ */
+function toggleFullscreen() {
+  if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
+    // Enter fullscreen
+    if (videoContainer.requestFullscreen) {
+      videoContainer.requestFullscreen();
+    } else if (videoContainer.webkitRequestFullscreen) {
+      videoContainer.webkitRequestFullscreen();
+    } else if (videoContainer.mozRequestFullScreen) {
+      videoContainer.mozRequestFullScreen();
+    } else if (videoContainer.msRequestFullscreen) {
+      videoContainer.msRequestFullscreen();
+    }
+  } else {
+    // Exit fullscreen
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    } else if (document.mozCancelFullScreen) {
+      document.mozCancelFullScreen();
+    } else if (document.msExitFullscreen) {
+      document.msExitFullscreen();
+    }
+  }
+}
+
+/**
+ * Update fullscreen button text based on fullscreen state
+ */
+function updateFullscreenButton() {
+  const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  fullscreenBtn.textContent = isFullscreen ? "⛶ Exit Fullscreen" : "⛶ Fullscreen";
+  videoContainer.classList.toggle("fullscreen", isFullscreen);
+}
+
 // Attach event listeners
 startBtn.addEventListener("click", start);
 stopBtn.addEventListener("click", stop);
+fullscreenBtn.addEventListener("click", toggleFullscreen);
+
+// Listen for fullscreen changes
+document.addEventListener("fullscreenchange", updateFullscreenButton);
+document.addEventListener("webkitfullscreenchange", updateFullscreenButton);
+document.addEventListener("mozfullscreenchange", updateFullscreenButton);
+document.addEventListener("MSFullscreenChange", updateFullscreenButton);
 
 // Cleanup on page unload
 window.addEventListener("pagehide", () => {
