@@ -90,7 +90,8 @@ app.post('/api/init-webrtc', async (req, res) => {
         streamOutputNames: wrtcParams.streamOutputNames,
         dataOutputNames: wrtcParams.dataOutputNames,
         workflowParameters: wrtcParams.workflowParameters,
-        threadPoolWorkers: wrtcParams.threadPoolWorkers
+        threadPoolWorkers: wrtcParams.threadPoolWorkers,
+        iceServers: wrtcParams.iceServers
       }
     });
 
@@ -106,6 +107,54 @@ app.post('/api/init-webrtc', async (req, res) => {
 
     res.status(500).json({
       error: error.message || 'Failed to initialize WebRTC worker'
+    });
+  }
+});
+
+/**
+ * GET /api/webrtc_turn_config
+ *
+ * Proxies TURN server configuration request to Roboflow.
+ * Returns dynamic TURN credentials for WebRTC connections behind NAT/firewalls.
+ *
+ * Response:
+ *   - username: string (timestamped credential)
+ *   - credential: string (HMAC-based secret)
+ *   - ttl: number (time-to-live in seconds)
+ *   - uris: string[] (TURN server URIs)
+ */
+app.get('/api/webrtc_turn_config', async (req, res) => {
+  try {
+    const apiKey = process.env.ROBOFLOW_API_KEY;
+    if (!apiKey) {
+      console.error('[Server] ROBOFLOW_API_KEY not set in environment');
+      return res.status(500).json({
+        error: 'Server configuration error: API key not configured'
+      });
+    }
+
+    const serverUrl = 'https://api.roboflow.com';
+    const turnConfigUrl = `${serverUrl}/webrtc_turn_config?api_key=${apiKey}`;
+
+    console.log('[Server] Fetching TURN credentials...');
+
+    const response = await fetch(turnConfigUrl);
+
+    if (!response.ok) {
+      throw new Error(`Roboflow API returned ${response.status}: ${response.statusText}`);
+    }
+
+    const turnConfig = await response.json();
+
+    console.log('[Server] TURN credentials fetched successfully');
+    console.log('[Server] TURN config:', JSON.stringify(turnConfig, null, 2));
+
+    res.json(turnConfig);
+
+  } catch (error) {
+    console.error('[Server] Error fetching TURN config:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to fetch TURN configuration'
     });
   }
 });

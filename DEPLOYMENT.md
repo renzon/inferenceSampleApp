@@ -219,6 +219,8 @@ docker-compose ps certbot
 
 ## Common Commands
 
+**Note**: Service names in docker-compose are `app`, `nginx`, and `certbot`. Container names are `inference-app`, `inference-nginx`, and `inference-certbot`. Use service names with docker-compose commands.
+
 ```bash
 # Start services
 docker-compose up -d
@@ -231,9 +233,12 @@ docker-compose logs -f
 docker-compose logs -f app
 docker-compose logs -f nginx
 
-# Restart a service
+# Restart a service (use service name, not container name)
 docker-compose restart app
 docker-compose restart nginx
+
+# List running services
+docker-compose ps
 
 # Rebuild after code changes
 docker-compose up -d --build
