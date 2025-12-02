@@ -90,19 +90,32 @@ docker-compose --version
 git clone <your-repo-url> inference-app
 cd inference-app
 
-# Create .env file
-nano .env
-```
-
-Add the following to `.env`:
-```
+# Create .env file with your API key
+cat > .env << 'EOF'
 ROBOFLOW_API_KEY=your_roboflow_api_key_here
 ROBOFLOW_SERVER_URL=
 NODE_ENV=production
 PORT=3000
+EOF
+
+# Edit the .env file to add your actual API key
+nano .env
 ```
 
+**Important**: Replace `your_roboflow_api_key_here` with your actual Roboflow API key.
+
 Save and exit (Ctrl+X, then Y, then Enter).
+
+**Verify the .env file was created correctly:**
+```bash
+# Check that the file exists and has content
+cat .env
+
+# Verify the API key is set (should NOT show "your_roboflow_api_key_here")
+grep ROBOFLOW_API_KEY .env
+```
+
+The output should show your actual API key, not the placeholder text.
 
 ## Step 3: Initial Setup (HTTP Only)
 
@@ -115,11 +128,32 @@ cp nginx/conf.d/default-http.conf nginx/conf.d/default.conf
 # Build and start containers
 docker-compose up -d --build
 
-# Check logs
+# Wait a few seconds for containers to start
+sleep 5
+
+# Check logs to verify the API key is loaded
+docker-compose logs app | grep -i "api key\|warning\|error"
+
+# If you see "ROBOFLOW_API_KEY not set", verify your .env file:
+# 1. Check file exists: ls -la .env
+# 2. Check contents: cat .env
+# 3. Verify API key is set (should show your actual key, not placeholder):
+#    grep ROBOFLOW_API_KEY .env
+# 4. If needed, restart: docker-compose restart app
+
+# Test the health endpoint
+curl http://localhost:3000/api/health
+
+# Should return: {"status":"ok","apiKeyConfigured":true,...}
+# If apiKeyConfigured is false, check your .env file
+
+# View all logs
 docker-compose logs -f
 ```
 
-Verify the application is accessible at `http://your-ec2-ip`.
+**Verify the application is accessible:**
+- Check health: `curl http://localhost:3000/api/health`
+- Access in browser: `http://your-ec2-ip`
 
 ## Step 4: Set Up SSL with Let's Encrypt
 
@@ -135,7 +169,7 @@ docker-compose run --rm --entrypoint "" certbot certbot certonly \
   --email renzo@roboflow.com \
   --agree-tos \
   --no-eff-email \
-  -d dev.pro.br \
+
   -d cf.dev.pro.br
 
 # After certificate is obtained, restore the HTTPS config and update domain
@@ -144,10 +178,10 @@ git checkout nginx/conf.d/default.conf
 
 # Now update the domain in default.conf (replace YOUR_DOMAIN with your actual domain)
 # Use the first domain from your certificate (e.g., dev.pro.br)
-sed -i 's/YOUR_DOMAIN/dev.pro.br/g' nginx/conf.d/default.conf
+sed -i 's/YOUR_DOMAIN/cf.dev.pro.br/g' nginx/conf.d/default.conf
 
 # Also update server_name if needed (optional, _ means accept any domain)
-# sed -i 's/server_name _;/server_name dev.pro.br cf.dev.pro.br;/g' nginx/conf.d/default.conf
+# sed -i 's/server_name _;/server_name cf.dev.pro.br;/g' nginx/conf.d/default.conf
 
 # Restart NGINX to load SSL certificates
 docker-compose restart nginx
