@@ -124,21 +124,8 @@ Verify the application is accessible at `http://your-ec2-ip`.
 ## Step 4: Set Up SSL with Let's Encrypt
 
 ```bash
-# Stop the containers temporarily
-docker-compose down
-
-# Update NGINX config with your domain
-# Replace YOUR_DOMAIN in nginx/conf.d/default.conf with your actual domain
-sed -i 's/YOUR_DOMAIN/your-domain.com/g' nginx/conf.d/default.conf
-
-# Restore the full default.conf (with HTTPS)
-# The file should already have HTTPS configuration
-
-# Create directories for certbot
-mkdir -p nginx/ssl
-
-# Start containers again
-docker-compose up -d
+# Make sure containers are running with HTTP config (from Step 3)
+docker-compose ps
 
 # Obtain SSL certificate (replace with your domain and email)
 # Note: We override the entrypoint because the certbot service has a custom entrypoint for renewals
@@ -151,9 +138,16 @@ docker-compose run --rm --entrypoint "" certbot certbot certonly \
   -d dev.pro.br \
   -d cf.dev.pro.br
 
-# After certificate is obtained, update the domain in default.conf
-# Replace YOUR_DOMAIN with your actual domain (e.g., dev.pro.br)
+# After certificate is obtained, restore the HTTPS config and update domain
+# Restore the original default.conf (with HTTPS configuration) from the repository
+git checkout nginx/conf.d/default.conf
+
+# Now update the domain in default.conf (replace YOUR_DOMAIN with your actual domain)
+# Use the first domain from your certificate (e.g., dev.pro.br)
 sed -i 's/YOUR_DOMAIN/dev.pro.br/g' nginx/conf.d/default.conf
+
+# Also update server_name if needed (optional, _ means accept any domain)
+# sed -i 's/server_name _;/server_name dev.pro.br cf.dev.pro.br;/g' nginx/conf.d/default.conf
 
 # Restart NGINX to load SSL certificates
 docker-compose restart nginx
